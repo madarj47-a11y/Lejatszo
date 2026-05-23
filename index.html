@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lejátszó</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <style>
+    body { background: #111; margin: 0; padding: 10px; }
+    
+    .plyr-container { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px; background: #000; margin: 20px auto; opacity: 0; transition: opacity 0.5s ease; box-shadow: 0 10px 40px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); max-width: 800px; position: relative; }
+    .plyr { height: 100% !important; }
+    .plyr video { object-fit: contain !important; }
+    .plyr__poster { background-size: cover !important; background-position: center !important; display: block !important; }
+    #player { display: none; width: 100%; }
+    :root { --plyr-color-main: #00bcd4; }
+    
+    /* IDŐK FIXÁLÁSA - EGY SORBAN TARTJA, KIS KÉPERNYŐN IS STABIL */
+    .plyr__time { display: inline-flex !important; align-items: center; font-size: 12px !important; padding: 0 2px !important; }
+    .plyr__time--duration { display: inline-block !important; }
+    .plyr__time--current + .plyr__time--duration::before { content: ' / ' !important; margin-right: 2px; }
+    
+    @media (max-width: 480px) {
+      .plyr__time { font-size: 11px !important; }
+      .plyr__controls { padding: 5px !important; }
+    }
+
+    .plyr__controls .plyr__control.plyr__control--custom-btn { display: inline-flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; color: #ffffff !important; opacity: 1 !important; padding: 0 !important; width: 32px !important; height: 32px !important; cursor: pointer !important; vertical-align: middle !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn:hover { background: #00b3ff !important; color: #ffffff !important; border-radius: 4px !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn svg { width: 18px !important; height: 18px !important; display: block !important; fill: none !important; stroke: #ffffff !important; stroke-width: 2.5 !important; stroke-linecap: round !important; stroke-linejoin: round !important; }
+
+    .plyr-playlist-menu { position: absolute; top: 0; right: 0; bottom: 0; left: 0; height: 100% !important; max-height: 100% !important; background: rgba(15, 18, 24, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 200; display: flex; flex-direction: column; padding: 12px; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; box-sizing: border-box; }
+    .plyr-playlist-menu.open { opacity: 1; pointer-events: auto; }
+    .menu-header { display: flex; justify-content: space-between; align-items: center; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; flex-shrink: 0; }
+    .menu-header h3 { color: #fff; margin: 0; font-size: 15px; }
+    .season-selector-wrapper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+    .season-tab-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+    .season-tab-btn.active { background: #00b3ff; color: #fff; border-color: #00b3ff; }
+    .close-menu-btn { background: transparent; border: none; color: #aaa; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; }
+    .playlist-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; min-height: 0; }
+    .playlist-item { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); color: #ccc; padding: 5px; text-align: left; cursor: pointer; border-radius: 6px; transition: all 0.2s; flex-shrink: 0; }
+    .playlist-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .playlist-item.active { background: rgba(255, 255, 255, 0.05); color: #ffffff; border: 1px solid #ffffff; font-weight: bold; }
+    .mini-poster { width: 30px; height: 42px; object-fit: cover; border-radius: 4px; background: #222; }
+    .episode-title { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="plyr-container" id="outputBox">
+    <video id="player" playsinline controls></video>
+    <div id="playlistMenu" class="plyr-playlist-menu">
+      <div class="menu-header">
+        <h3>Epizód választó</h3>
+        <button class="close-menu-btn" id="menuCloseBtn">&times;</button>
+      </div>
+      <div class="season-selector-wrapper" id="seasonTabsContainer"></div>
+      <div class="playlist-scroll" id="itemsContainer"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+  <script>
+    const sorozatAdatok = {
+  "1. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/tCp0h41Gz2fTxCOnePcS5C803VI.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/bubo-soro-202/01.mp4",
+        "title": "01",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/bubo-soro-202/02.mp4",
+        "title": "02",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      }
+    ]
+  },
+  "2. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/7dKPju66Eb4FYjW8iKhxZJWWft1.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/bubo-soro-202/03.mp4",
+        "title": "01",
+        "poster": "https://image.tmdb.org/t/p/original/1V2PSez4pNZ9a4Bbomm7KZiQJ44.jpg"
+      },
+      {
+        "src": "https://archive.org/download/bubo-soro-202/04.mp4",
+        "title": "02",
+        "poster": "https://image.tmdb.org/t/p/original/1V2PSez4pNZ9a4Bbomm7KZiQJ44.jpg"
+      }
+    ]
+  }
+};
+    let aktualisEvad = "";
+    let aktualisVideoLanc = "";
+
+    const player = new Plyr('#player', {
+      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'fullscreen']
+    });
+
+    const menu = document.getElementById('playlistMenu');
+    const container = document.getElementById('itemsContainer');
+    const tabsContainer = document.getElementById('seasonTabsContainer');
+    const closeBtn = document.getElementById('menuCloseBtn');
+    const mainBox = document.getElementById('outputBox');
+
+    player.on('ready', () => {
+      if (mainBox) mainBox.style.opacity = "1";
+
+      const plyrContainer = document.querySelector('.plyr');
+      if (plyrContainer && menu) { plyrContainer.appendChild(menu); }
+
+      const volumeElement = document.querySelector('.plyr__volume');
+      if (volumeElement) {
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'plyr__control plyr__control--custom-btn';
+        menuBtn.id = 'customMenuBtn';
+        menuBtn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`;
+        
+        const intentBtn = document.createElement('button');
+        intentBtn.type = 'button';
+        intentBtn.className = 'plyr__control plyr__control--custom-btn';
+        intentBtn.id = 'customIntentBtn';
+        intentBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
+
+        volumeElement.parentNode.insertBefore(intentBtn, volumeElement.nextSibling);
+        volumeElement.parentNode.insertBefore(menuBtn, intentBtn);
+
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation(); menu.classList.add('open');
+        });
+
+        intentBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if(aktualisVideoLanc) {
+            const intentUrl = `intent:${aktualisVideoLanc}#Intent;type=video/*;S.title=Lejatszas;end`;
+            window.location.href = intentUrl;
+          }
+        });
+      }
+    });
+
+    closeBtn.onclick = (e) => { e.stopPropagation(); menu.classList.remove('open'); };
+
+    function buildMenu() {
+      tabsContainer.innerHTML = "";
+      Object.keys(sorozatAdatok).forEach(evadNev => {
+        const btn = document.createElement('button');
+        btn.className = `season-tab-btn ${evadNev === aktualisEvad ? 'active' : ''}`;
+        btn.innerText = evadNev;
+        btn.onclick = (e) => { e.stopPropagation(); aktualisEvad = evadNev; buildMenu(); };
+        tabsContainer.appendChild(btn);
+      });
+
+      container.innerHTML = "";
+      const evad = sorozatAdatok[aktualisEvad];
+      if(evad && evad.epizodok) {
+        evad.epizodok.forEach((ep) => {
+          const item = document.createElement('div');
+          item.className = 'playlist-item';
+          if (aktualisVideoLanc === ep.src) { item.classList.add('active'); }
+          item.innerHTML = `<img src="${ep.poster}" class="mini-poster" /><span class="episode-title">${ep.title}</span>`;
+          item.onclick = () => {
+            document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            betoltVideo(ep.src, evad.hatter);
+            menu.classList.remove('open');
+          };
+          container.appendChild(item);
+        });
+      }
+    }
+
+    function betoltVideo(src, hatterUrl) {
+      aktualisVideoLanc = src;
+      player.source = { 
+        type: 'video', 
+        poster: hatterUrl || '',
+        sources: [{ src: src, type: 'video/mp4' }] 
+      };
+    }
+
+    function initPlayer() {
+      const elsoEvad = Object.keys(sorozatAdatok)[0];
+      if(elsoEvad) {
+        aktualisEvad = elsoEvad;
+        const elsoEp = sorozatAdatok[aktualisEvad].epizodok[0];
+        if(elsoEp) { betoltVideo(elsoEp.src, sorozatAdatok[aktualisEvad].hatter); }
+      }
+      buildMenu();
+    }
+    setTimeout(initPlayer, 300);
+  </script>
+</body>
+</html>
