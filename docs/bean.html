@@ -35,6 +35,33 @@
     border: none !important;
     outline: none !important;
 }
+.plyr-playlist-menu { 
+    position: absolute; 
+    top: 0; 
+    right: 0; 
+    bottom: 0; 
+    left: 0; 
+    height: 100% !important; 
+    background: rgba(15, 18, 24, 0.95); 
+    backdrop-filter: blur(4px); 
+    -webkit-backdrop-filter: blur(4px); 
+    z-index: 200; 
+    display: flex; 
+    flex-direction: column; 
+    /* padding: 8px; <-- TÖRÖLD EZT */
+    margin: 0; /* Biztosítsd, hogy ne legyen margó */
+    opacity: 0; 
+    pointer-events: none; 
+    transition: opacity 0.3s ease; 
+    box-sizing: border-box; 
+    border-radius: 8px; /* Ha a konténer lekerekített, ez segít */
+}
+
+/* Helyette a belső konténereknek adj margót */
+.menu-header, .season-selector-wrapper, .playlist-scroll {
+    margin: 8px; /* Itt hozd vissza a 8px-es távolságot */
+}
+
 
     .menu-header { display: flex; justify-content: space-between; align-items: center; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; flex-shrink: 0; }
     .menu-header h3 { color: #fff; margin: 0; font-size: 15px; }
