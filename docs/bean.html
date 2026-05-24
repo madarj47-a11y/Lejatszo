@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lejátszó</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <style>
+    body { background: #111; margin: 0; padding: 0px; }
+    
+    .plyr-container { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #000; margin: 0px auto; opacity: 0; transition: opacity 0.5s ease; box-shadow: 0 10px 40px rgba(0,0,0,0.6); border: 0px solid rgba(255,255,255,0.1); max-width: 800px; position: relative; }
+    .plyr { height: 100% !important; }
+    .plyr video { object-fit: contain !important; }
+    .plyr__poster { background-size: cover !important; background-position: center !important; display: block !important; }
+    #player { display: none; width: 100%; }
+    :root { --plyr-color-main: #00bcd4; }
+    
+    /* IDŐK FIXÁLÁSA - EGY SORBAN TARTJA, KIS KÉPERNYŐN IS STABIL */
+    .plyr__time { display: inline-flex !important; align-items: center; font-size: 12px !important; padding: 0 2px !important; }
+    .plyr__time--duration { display: inline-block !important; }
+    .plyr__time--current + .plyr__time--duration::before { content: ' / ' !important; margin-right: 2px; }
+    
+    @media (max-width: 480px) {
+      .plyr__time { font-size: 11px !important; }
+      .plyr__controls { padding: 5px !important; }
+    }
+
+    .plyr__controls .plyr__control.plyr__control--custom-btn { display: inline-flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; color: #ffffff !important; opacity: 1 !important; padding: 0 !important; width: 32px !important; height: 32px !important; cursor: pointer !important; vertical-align: middle !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn:hover { background: #00b3ff !important; color: #ffffff !important; border-radius: 4px !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn svg { width: 18px !important; height: 18px !important; display: block !important; fill: none !important; stroke: #ffffff !important; stroke-width: 2.5 !important; stroke-linecap: round !important; stroke-linejoin: round !important; }
+
+    .plyr-playlist-menu { position: absolute; top: 0; right: 0; bottom: 0; left: 0; height: 100% !important; max-height: 100% !important; background: rgba(15, 18, 24, 0.95); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 200; display: flex; flex-direction: column; padding: 12px; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; box-sizing: border-box; }
+    .plyr-playlist-menu.open { opacity: 1; pointer-events: auto; }
+    .menu-header { display: flex; justify-content: space-between; align-items: center; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; flex-shrink: 0; }
+    .menu-header h3 { color: #fff; margin: 0; font-size: 15px; }
+    .season-selector-wrapper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+    .season-tab-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+    .season-tab-btn.active { background: #00b3ff; color: #fff; border-color: #00b3ff; }
+    .close-menu-btn { background: transparent; border: none; color: #aaa; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; }
+    .playlist-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; min-height: 0; }
+    .playlist-item { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); color: #ccc; padding: 5px; text-align: left; cursor: pointer; border-radius: 6px; transition: all 0.2s; flex-shrink: 0; }
+    .playlist-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .playlist-item.active { background: rgba(255, 255, 255, 0.05); color: #ffffff; border: 1px solid #ffffff; font-weight: bold; }
+    .mini-poster { width: 30px; height: 42px; object-fit: cover; border-radius: 4px; background: #222; }
+    .episode-title { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="plyr-container" id="outputBox">
+    <video id="player" playsinline controls></video>
+    <div id="playlistMenu" class="plyr-playlist-menu">
+      <div class="menu-header">
+        <h3>Epizód választó</h3>
+        <button class="close-menu-btn" id="menuCloseBtn">&times;</button>
+      </div>
+      <div class="season-selector-wrapper" id="seasonTabsContainer"></div>
+      <div class="playlist-scroll" id="itemsContainer"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+  <script>
+    const sorozatAdatok = {
+  "1. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/b5c4ZWXOTcXD8RV7OoZb8HjIJ1i.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E01.mp4",
+        "title": "01.​rész - A természet lágy ölén",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E02.mp4",
+        "title": "02.​rész - Teddy eltűnik",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E03.mp4",
+        "title": "03.rész - Megállni tilos!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E04.mp4",
+        "title": "​04.rész - Bean kimcse",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E05.mp4",
+        "title": "05.rész - Mr. Bean, a művész",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E06.mp4",
+        "title": "06.​rész - A légy",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E07.mp4",
+        "title": "07.​rész - Pantomim",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E08.mp4",
+        "title": "08.​rész - Tavaszi nagytakarítás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E09.mp4",
+        "title": "09.rész - Állatok tartása tilos!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E10.mp4",
+        "title": "10.​rész - Napsugár",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E11.mp4",
+        "title": "11.rész - Szülinapi maci",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E12.mp4",
+        "title": "12.rész - A vakond",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E13.mp4",
+        "title": "13.rész - Útépítés",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E14.mp4",
+        "title": "14.rész - Kanapé",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E15.mp4",
+        "title": "15.​rész - Kincs",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E16.mp4",
+        "title": "16.rész - Fedél nélkül",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E17.mp4",
+        "title": "17.rész - Kemping",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E18.mp4",
+        "title": "18.rész - Teddy a pilóta",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E19.mp4",
+        "title": "19.rész - Mr. Bean a palotában",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E20.mp4",
+        "title": "20.rész - Mr. Bean gyerekkora",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E21.mp4",
+        "title": "21.rész - A rózsaszín háziállat",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E22.mp4",
+        "title": "22.rész - Vacsora két főre",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E23.mp4",
+        "title": "23.rész - A teniszlabda",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E24.mp4",
+        "title": "24.rész - Fogfájás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E25.mp4",
+        "title": "25.rész - Hajvágás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E26.mp4",
+        "title": "26.rész - Szomszédok",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E27.mp4",
+        "title": "27.rész - Nővér!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E28.mp4",
+        "title": "28.rész - Macskajaj",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E29.mp4",
+        "title": "29.rész - A bevásárlókocsi",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E30.mp4",
+        "title": "30.rész - A tolvaj szarka",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E31.mp4",
+        "title": "31.rész - Macskamegőrzés",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E32.mp4",
+        "title": "32.rész - A palack",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E33.mp4",
+        "title": "33.rész - Az aranyhal",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E34.mp4",
+        "title": "34.rész - A feltaláló",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E35.mp4",
+        "title": "35.rész - Autó gondok",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E36.mp4",
+        "title": "36.rész - Étterem",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E37.mp4",
+        "title": "37.rész - Műtolvaj",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E38.mp4",
+        "title": "38.rész - Ijedős Mr. Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E39.mp4",
+        "title": "39.rész - Randevú",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E40.mp4",
+        "title": "40.rész - Körözés",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E41.mp4",
+        "title": "41.rész - Kütyüs kölyök",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E42.mp4",
+        "title": "42.rész - A vendég",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E43.mp4",
+        "title": "43.rész - Nagy TV",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E44.mp4",
+        "title": "44.rész - Klimpírozás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E45.mp4",
+        "title": "45.rész - Futóverseny",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E46.mp4",
+        "title": "46.rész - A gólya Mr. Bean és a tojás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E47.mp4",
+        "title": "47.rész - Bosszantó békák",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E48.mp4",
+        "title": "48.rész - A vendéglátás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E49.mp4",
+        "title": "49.rész - Királyi átalakítás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E50.mp4",
+        "title": "50.rész - Szupertök",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E51.mp4",
+        "title": "51.rész - Szerelmes Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video-2024/S01E52.mp4",
+        "title": "52.rész - Hasonmás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      }
+    ]
+  },
+  "2. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/tCp0h41Gz2fTxCOnePcS5C803VI.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/01.mp4",
+        "title": "01. rész - Házimozi",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/02.mp4",
+        "title": "02. rész - Halmegőrzés",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/03.mp4",
+        "title": "03. rész - Hajókirándulás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/04.mp4",
+        "title": "04. rész - A céllövölde",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/05.mp4",
+        "title": "05. rész - Környezetbarát Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/06.mp4",
+        "title": "06. rész - Bankautomata",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/07.mp4",
+        "title": "07. rész - Szemétdomb",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/08.mp4",
+        "title": "08. rész - Patkányfogó",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/09.mp4",
+        "title": "09. rész - Bean Valentin napja",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/10.mp4",
+        "title": "10. rész - Egyél, amennyi beléd fér",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/11.mp4",
+        "title": "11. rész - Szereld magad!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/12.mp4",
+        "title": "12. rész - Teddy nyaralni megy",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/13.mp4",
+        "title": "13. rész - Az újság",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/14.mp4",
+        "title": "14. rész - Híres Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/15.mp4",
+        "title": "15. rész - Szuperkém",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/16.mp4",
+        "title": "16. rész - Bean, a cserkész",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/17.mp4",
+        "title": "17. rész - Vissza az iskolába",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/18.mp4",
+        "title": "18. rész - Lord Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/19.mp4",
+        "title": "19. rész - Autósüldözés",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/20.mp4",
+        "title": "20. rész - Esküvő",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/21.mp4",
+        "title": "21. rész - Bean-fon",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/22.mp4",
+        "title": "22. rész - Bean hotel",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/23.mp4",
+        "title": "23. rész - Jurassic Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/24.mp4",
+        "title": "24. rész - Gondos Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/25.mp4",
+        "title": "25. rész - Bean az operában",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/26.mp4",
+        "title": "26. rész - Bean, a taxis",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/27.mp4",
+        "title": "27. rész - Izmos Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/28.mp4",
+        "title": "28. rész - Egy új barát",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/29.mp4",
+        "title": "29. rész - A lift",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/30.mp4",
+        "title": "30. rész - Ezt ásd ki!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/31.mp4",
+        "title": "31. rész - Hipnotizált Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/32.mp4",
+        "title": "32. rész - Autómosó",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/33.mp4",
+        "title": "33. rész - Hol szerezted azt a macskát?",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/34.mp4",
+        "title": "34. rész - Tanulságos leckék",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/35.mp4",
+        "title": "35. rész - Halloween",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/36.mp4",
+        "title": "36. rész - Bean fest",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/37.mp4",
+        "title": "37. rész - Birkózó Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/38.mp4",
+        "title": "38. rész - Ritka madár",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/39.mp4",
+        "title": "39. rész - Bean szafarija",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/40.mp4",
+        "title": "40. rész - A golfmeccs",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/41.mp4",
+        "title": "41. rész - Szuperhős Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/42.mp4",
+        "title": "42. rész - Micsoda szemétdomb!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/43.mp4",
+        "title": "43. rész - A robot",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/44.mp4",
+        "title": "44. rész - Fagylalt",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/45.mp4",
+        "title": "45. rész - Szülinapi buli",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/46.mp4",
+        "title": "46. rész - A kertben",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/47.mp4",
+        "title": "47. rész - Egy varázslatos szabadnap",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/48.mp4",
+        "title": "48. rész - Labdamedence",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/49.mp4",
+        "title": "49. rész - Pizza Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/50.mp4",
+        "title": "50. rész - A fénykép",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/51.mp4",
+        "title": "51. rész - Táncos Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video2-2024/52.mp4",
+        "title": "52. rész - Bean vásárol",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      }
+    ]
+  },
+  "3. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/zVuWmf6oqB91OANUKWo0VqCLov4.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/01.mp4",
+        "title": "01. rész - Vége a játéknak",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/02.mp4",
+        "title": "02. rész - Expressz küldemény",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/03.mp4",
+        "title": "03. rész - Kutyaélet",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/04.mp4",
+        "title": "04. rész - Bűz van!",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/05.mp4",
+        "title": "05. rész - Szülinapi zűr",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/06.mp4",
+        "title": "06. rész - Volt egyszer egy ágy",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/07.mp4",
+        "title": "07. rész - A gyógyfürdőben",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/08.mp4",
+        "title": "08. rész - Jótékonyság",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/09.mp4",
+        "title": "09. rész - A hegedűművész",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/10.mp4",
+        "title": "10. rész - A lakókocsi",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/11.mp4",
+        "title": "11. rész - A kísértetház",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/12.mp4",
+        "title": "12. rész - A Bean-kölni",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/13.mp4",
+        "title": "13. rész - Üres tankkal",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/14.mp4",
+        "title": "14. rész - Bolhás Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/15.mp4",
+        "title": "15. rész - Bean kávé",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/16.mp4",
+        "title": "16. rész - A nagy fagy",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/17.mp4",
+        "title": "17. rész - Karmolász az aduász",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/18.mp4",
+        "title": "18. rész - Buszos kirándulás",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/19.mp4",
+        "title": "19. rész - Mentsük meg a fát",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/20.mp4",
+        "title": "20. rész - Eladósorban",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/21.mp4",
+        "title": "21. rész - Ugrató Bean",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/22.mp4",
+        "title": "22. rész - Hol a cica?",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/23.mp4",
+        "title": "23. rész - Matrica mánia",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/24.mp4",
+        "title": "24. rész - Mr. Bean a múzeumban",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/25.mp4",
+        "title": "25. rész - Irma sofőrje",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-video3-2024/26.mp4",
+        "title": "26. rész - A versenyszellem",
+        "poster": "https://image.tmdb.org/t/p/original/oJMBGtPeQvswzysnfaf7HTqenFR.jpg"
+      }
+    ]
+  }
+};
+    let aktualisEvad = "";
+    let aktualisVideoLanc = "";
+
+    const player = new Plyr('#player', {
+      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'fullscreen']
+    });
+
+    const menu = document.getElementById('playlistMenu');
+    const container = document.getElementById('itemsContainer');
+    const tabsContainer = document.getElementById('seasonTabsContainer');
+    const closeBtn = document.getElementById('menuCloseBtn');
+    const mainBox = document.getElementById('outputBox');
+
+    player.on('ready', () => {
+      if (mainBox) mainBox.style.opacity = "1";
+
+      const plyrContainer = document.querySelector('.plyr');
+      if (plyrContainer && menu) { plyrContainer.appendChild(menu); }
+
+      const volumeElement = document.querySelector('.plyr__volume');
+      if (volumeElement) {
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'plyr__control plyr__control--custom-btn';
+        menuBtn.id = 'customMenuBtn';
+        menuBtn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`;
+        
+        const intentBtn = document.createElement('button');
+        intentBtn.type = 'button';
+        intentBtn.className = 'plyr__control plyr__control--custom-btn';
+        intentBtn.id = 'customIntentBtn';
+        intentBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
+
+        volumeElement.parentNode.insertBefore(intentBtn, volumeElement.nextSibling);
+        volumeElement.parentNode.insertBefore(menuBtn, intentBtn);
+
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation(); menu.classList.add('open');
+        });
+
+        intentBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if(aktualisVideoLanc) {
+            const intentUrl = `intent:${aktualisVideoLanc}#Intent;type=video/*;S.title=Lejatszas;end`;
+            window.location.href = intentUrl;
+          }
+        });
+      }
+    });
+
+    closeBtn.onclick = (e) => { e.stopPropagation(); menu.classList.remove('open'); };
+
+    function buildMenu() {
+      tabsContainer.innerHTML = "";
+      Object.keys(sorozatAdatok).forEach(evadNev => {
+        const btn = document.createElement('button');
+        btn.className = `season-tab-btn ${evadNev === aktualisEvad ? 'active' : ''}`;
+        btn.innerText = evadNev;
+        btn.onclick = (e) => { e.stopPropagation(); aktualisEvad = evadNev; buildMenu(); };
+        tabsContainer.appendChild(btn);
+      });
+
+      container.innerHTML = "";
+      const evad = sorozatAdatok[aktualisEvad];
+      if(evad && evad.epizodok) {
+        evad.epizodok.forEach((ep) => {
+          const item = document.createElement('div');
+          item.className = 'playlist-item';
+          if (aktualisVideoLanc === ep.src) { item.classList.add('active'); }
+          item.innerHTML = `<img src="${ep.poster}" class="mini-poster" /><span class="episode-title">${ep.title}</span>`;
+          item.onclick = () => {
+            document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            betoltVideo(ep.src, evad.hatter);
+            menu.classList.remove('open');
+          };
+          container.appendChild(item);
+        });
+      }
+    }
+
+    function betoltVideo(src, hatterUrl) {
+      aktualisVideoLanc = src;
+      player.source = { 
+        type: 'video', 
+        poster: hatterUrl || '',
+        sources: [{ src: src, type: 'video/mp4' }] 
+      };
+    }
+
+    function initPlayer() {
+      const elsoEvad = Object.keys(sorozatAdatok)[0];
+      if(elsoEvad) {
+        aktualisEvad = elsoEvad;
+        const elsoEp = sorozatAdatok[aktualisEvad].epizodok[0];
+        if(elsoEp) { betoltVideo(elsoEp.src, sorozatAdatok[aktualisEvad].hatter); }
+      }
+      buildMenu();
+    }
+    setTimeout(initPlayer, 300);
+  </script>
+</body>
+</html>
