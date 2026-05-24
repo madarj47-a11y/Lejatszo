@@ -36,7 +36,32 @@
     .season-selector-wrapper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
     .season-tab-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
     .season-tab-btn.active { background: #00b3ff; color: #fff; border-color: #00b3ff; }
-    .close-menu-btn { background: transparent; border: none; color: #aaa; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; }
+     .close-menu-btn {
+    position: absolute !important;
+    top: 15px !important;
+    right: 10px !important;
+    width: 30px !important;
+    height: 30px !important;
+    
+    /* Elegáns, félig áttetsző sötétszürke háttér */
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important; /* Vékony keret, ha szeretnéd */
+    
+    color: #fff !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 0 !important;
+    z-index: 9999 !important;
+}
+
+
     .playlist-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; min-height: 0; }
     .playlist-item { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); color: #ccc; padding: 5px; text-align: left; cursor: pointer; border-radius: 6px; transition: all 0.2s; flex-shrink: 0; }
     .playlist-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
@@ -50,12 +75,9 @@
   <div class="plyr-container" id="outputBox">
     <video id="player" playsinline controls></video>
     <div id="playlistMenu" class="plyr-playlist-menu">
-      <div class="menu-header">
-        <h3>Epizód választó</h3>
-        <button class="close-menu-btn" id="menuCloseBtn">&times;</button>
-      </div>
       <div class="season-selector-wrapper" id="seasonTabsContainer"></div>
       <div class="playlist-scroll" id="itemsContainer"></div>
+ <button class="close-menu-btn" id="menuCloseBtn">&times;</button>
     </div>
   </div>
 
