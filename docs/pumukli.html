@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lejátszó</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <style>
+    body { background: #111; margin: 0; padding: 0px; }
+    
+    .plyr-container { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #000; opacity: 0; transition: opacity 0.5s ease; box-shadow: 0 10px 40px rgba(0,0,0,0.6); max-width: 800px; position: relative; }
+    .plyr { height: 100% !important; }
+    .plyr video { object-fit: contain !important; }
+    .plyr__poster { background-size: cover !important; background-position: center !important; display: block !important; }
+    #player { display: none; width: 100%; }
+    :root { --plyr-color-main: #00bcd4; }
+    
+    /* IDŐK FIXÁLÁSA - EGY SORBAN TARTJA, KIS KÉPERNYŐN IS STABIL */
+    .plyr__time { display: inline-flex !important; align-items: center; font-size: 12px !important; padding: 0 2px !important; }
+    .plyr__time--duration { display: inline-block !important; }
+    .plyr__time--current + .plyr__time--duration::before { content: ' / ' !important; margin-right: 2px; }
+    
+    @media (max-width: 480px) {
+      .plyr__time { font-size: 11px !important; }
+      .plyr__controls { padding: 5px !important; }
+    }
+
+    .plyr__controls .plyr__control.plyr__control--custom-btn { display: inline-flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; color: #ffffff !important; opacity: 1 !important; padding: 0 !important; width: 32px !important; height: 32px !important; cursor: pointer !important; vertical-align: middle !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn:hover { background: #00b3ff !important; color: #ffffff !important; border-radius: 4px !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn svg { width: 18px !important; height: 18px !important; display: block !important; fill: none !important; stroke: #ffffff !important; stroke-width: 2.5 !important; stroke-linecap: round !important; stroke-linejoin: round !important; }
+
+    .plyr-playlist-menu { position: absolute; top: 0; right: 0; bottom: 0; left: 0; height: 100% !important; max-height: 100% !important; background: rgba(15, 18, 24, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 200; display: flex; flex-direction: column; padding: 12px; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; box-sizing: border-box; }
+    .plyr-playlist-menu.open { opacity: 1; pointer-events: auto; }
+    .plyr-playlist-menu.open {
+    border: none !important;
+    outline: none !important;
+}
+.plyr-playlist-menu { 
+    position: absolute; 
+    top: 0; 
+    right: 0; 
+    bottom: 0; 
+    left: 0; 
+    height: 100% !important; 
+    background: rgba(15, 18, 24, 0.95); 
+    backdrop-filter: blur(4px); 
+    -webkit-backdrop-filter: blur(4px); 
+    z-index: 200; 
+    display: flex; 
+    flex-direction: column; 
+    /* padding: 8px; <-- TÖRÖLD EZT */
+    margin: 0; /* Biztosítsd, hogy ne legyen margó */
+    opacity: 0; 
+    pointer-events: none; 
+    transition: opacity 0.3s ease; 
+    box-sizing: border-box; 
+    border-radius: 8px; /* Ha a konténer lekerekített, ez segít */
+}
+
+/* Helyette a belső konténereknek adj margót */
+.menu-header, .season-selector-wrapper, .playlist-scroll {
+    margin: 8px; /* Itt hozd vissza a 8px-es távolságot */
+}
+.menu-header { display: flex; justify-content: space-between; align-items: center; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; flex-shrink: 0; }
+    .menu-header h3 { color: #fff; margin: 0; font-size: 15px; }
+    .season-selector-wrapper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+    .season-tab-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+    .season-tab-btn.active { background: #00b3ff; color: #fff; border-color: #00b3ff; }
+    .close-menu-btn {
+    position: absolute !important;
+    top: 15px !important;
+    right: 10px !important;
+    width: 30px !important;
+    height: 30px !important;
+    
+    /* Elegáns, félig áttetsző sötétszürke háttér */
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important; /* Vékony keret, ha szeretnéd */
+    
+    color: #fff !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 0 !important;
+    z-index: 9999 !important;
+}
+    .playlist-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; min-height: 0; }
+    .playlist-item { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); color: #ccc; padding: 5px; text-align: left; cursor: pointer; border-radius: 6px; transition: all 0.2s; flex-shrink: 0; }
+    .playlist-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .playlist-item.active { background: rgba(255, 255, 255, 0.05); color: #ffffff; border: 1px solid #ffffff; font-weight: bold; }
+    .mini-poster { width: 70px; height: 42px; object-fit: cover; border-radius: 4px; background: #222; }
+    .episode-title { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="plyr-container" id="outputBox">
+    <video id="player" playsinline controls></video>
+    <div id="playlistMenu" class="plyr-playlist-menu">
+      <div class="season-selector-wrapper" id="seasonTabsContainer"></div>
+      <div class="playlist-scroll" id="itemsContainer"></div>
+<button class="close-menu-btn" id="menuCloseBtn">&times;</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+  <script>
+    const sorozatAdatok = {
+  "1. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/cBxDgApyNMDy0YzWZS1v0aATgKj.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/Pumukli.S01E01..mp4",
+        "title": "01.rész - Kísértet a műhelyben",
+        "poster": "https://image.tmdb.org/t/p/original/5YINciyuDtoHYFjXAmXS8QLW9Ff.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/Pumukli.S01E02.mp4",
+        "title": "02.rész - Az eladott ágy",
+        "poster": "https://image.tmdb.org/t/p/original/uRQX7KObhxqRYh67oruLEu1pT84.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/Pumukli.S01E03.fszoba.mp4",
+        "title": "03.rész - Az új fürdőszoba",
+        "poster": "https://media.themoviedb.org/t/p/w640_and_h360_face/kfYZYRckQj4lkjdZkWmPfkWfAeG.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E04.K%C3%ADs%C3%A9rtet%20a%20kast%C3%A9lyban.mp4",
+        "title": "04.rész - Kísértet a kastélyban",
+        "poster": "https://image.tmdb.org/t/p/original/oFqA6BhxKx5FLl1Rv4exsSVNH9p.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E05.A%20babon%C3%A1s%20takar%C3%ADt%C3%B3n%C5%91.mp4",
+        "title": "05.rész - A babonás takarítónő",
+        "poster": "https://image.tmdb.org/t/p/original/t7udO2CmNTASkMNC2ebUVL6W5IS.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E06.Pumukli%20nyaral%20.mp4",
+        "title": "06.rész - Pumukli nyaral",
+        "poster": "https://image.tmdb.org/t/p/original/gTbtcuIpp5KLhCczMGpt5uUBFfX.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E07.A%20v%C3%ADziman%C3%B3.mp4",
+        "title": "07.rész - A vízimanó",
+        "poster": "https://image.tmdb.org/t/p/original/ihFbXKbms8r8wLFHlpRSGvUIYNl.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E08.Pumukli%20az%20iskol%C3%A1ban.mp4",
+        "title": "08.rész - Pumukli az iskolában",
+        "poster": "https://image.tmdb.org/t/p/original/egF1HL2AXiHAccpeLmoMRPyXKw2.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E09.Pumukli%20%C3%A9s%20a%20puding.mp4",
+        "title": "09.rész - Pumukli és a puding",
+        "poster": "https://image.tmdb.org/t/p/original/aw7eox51pevyw7kvgu2LpG6pc9i.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E10.A%20rejt%C3%A9lyes%20kutya.mp4",
+        "title": "10.rész - A rejtélyes kutya",
+        "poster": "https://image.tmdb.org/t/p/original/yBqyimT72yK4PeZcS593u9YJTGJ.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E11.Pumukli%20%C3%A9s%20a%20Mikul%C3%A1s.mp4",
+        "title": "11.rész - Pumukli és a Mikulás",
+        "poster": "https://image.tmdb.org/t/p/original/wMRHOcZVsi8wAj0mQPZUxgbRgzO.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E12.nyomon.mp4",
+        "title": "12.rész - Pumukli forró nyomon",
+        "poster": "https://image.tmdb.org/t/p/original/983tav73PbcgSdn40E6mx0v8Bau.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E13.A%20kar%C3%A1csonyi%20aj%C3%A1nd%C3%A9k.mp4",
+        "title": "13.rész - A karácsonyi ajándék",
+        "poster": "https://image.tmdb.org/t/p/original/555wgSo8muCOHK0PkQ4Tie8f2y.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E14.Az%20els%C5%91%20h%C3%B3.mp4",
+        "title": "14.rész - Az első hó",
+        "poster": "https://image.tmdb.org/t/p/original/wc9HVg8DeVwuGfUzQbOIhtbfJP7.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E15.A%20gyapj%C3%BA%20pul%C3%B3ver.mp4",
+        "title": "15.rész - A gyapjú pulóver",
+        "poster": "https://image.tmdb.org/t/p/original/nFSIyBEtNKYatkBbuPdErEGjqrm.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E16.A%20szak%C3%ADt%C3%A1s.mp4",
+        "title": "16.rész - A szakítás",
+        "poster": "https://image.tmdb.org/t/p/original/cP1blJ0oOezrfJYj80PT0kOAVIv.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E17.A%20szak%C3%ADt%C3%A1s%20ut%C3%A1n.mp4",
+        "title": "17.rész - A szakítás után",
+        "poster": "https://image.tmdb.org/t/p/original/fh37TTWk8IUfKDbzdlUZu3HWUWP.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E18.%C3%89der%20%C3%BAr%20l%C3%A1togat%C3%B3ja.mp4",
+        "title": "18.rész - Éder úr látogatója",
+        "poster": "https://image.tmdb.org/t/p/original/4U0BYgSK3WWczXl8olc4R3EySiw.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E19.Malaclakoma.mp4",
+        "title": "19.rész - Malaclakoma",
+        "poster": "https://image.tmdb.org/t/p/original/xK136IvCgj10KqKHupvz2nuWmCO.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E20.Pumukli%20%C3%A9s%20Puvakli.mp4",
+        "title": "20.rész - Pumukli és Puvakli",
+        "poster": "https://image.tmdb.org/t/p/original/5mS2cN15yNBMfVVMQufBPSvH9e4.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E21.Pumukli%20f%C3%A9l.mp4",
+        "title": "21.rész - Pumukli fél",
+        "poster": "https://image.tmdb.org/t/p/original/t8VUbFfqpONfQbUfgCb3jT4dOoi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E22.hab.mp4",
+        "title": "22.rész - A végzetes tejszínhab",
+        "poster": "https://image.tmdb.org/t/p/original/frbZMWrygg53qC6ueVYT8JtoqQb.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E23.Pumukli%20az%20%C3%A1llatkertben.mp4",
+        "title": "23.rész - Pumukli az állatkertben",
+        "poster": "https://image.tmdb.org/t/p/original/oWn03KjcnIco1NAipikjWxoZmWO.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E24.A%20titokzatos%20levelek.mp4",
+        "title": "24.rész - A titokzatos levelek",
+        "poster": "https://image.tmdb.org/t/p/original/hidGCReVedVEfHyx1FwinasWeOB.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E25.Pumukli%20%C3%A9s%20a%20h%C3%BAsv%C3%A9t.mp4",
+        "title": "25.rész - Pumukli és a húsvét",
+        "poster": "https://image.tmdb.org/t/p/original/nsJf4XOskU5tloOzGWKKd40zaCr.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S01E26.%C3%81prilis%20elseje.mp4",
+        "title": "26.rész - Április elseje",
+        "poster": "https://image.tmdb.org/t/p/original/8yexFFHJEpUYoU4EDhqpSOEievL.jpg"
+      }
+    ]
+  },
+  "2. Évad": {
+    "hatter": "https://image.tmdb.org/t/p/original/iLjenAfpDbg833mNycF7g8TTm09.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E01.jatekauto.mp4",
+        "title": "01.rész - A játékautó",
+        "poster": "https://image.tmdb.org/t/p/original/wRWWTxNCrE4CbJnytb5cJdhUbuU.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E02.Pumukli%20%C3%A9s%20a%20gy%C3%BCm%C3%B6lcsf%C3%A1k.mp4",
+        "title": "02.rész - Pumukli és a gyümölcsfák",
+        "poster": "https://image.tmdb.org/t/p/original/1CrvyhAR4IvV9Vhb452M88N8mhX.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E03.eger.mp4",
+        "title": "03.rész - Pumukli és az egér",
+        "poster": "https://image.tmdb.org/t/p/original/vlrRq6APtooqbWr2d0Eqh9HfAZ5.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E04.A%20vitorl%C3%A1shaj%C3%B3.mp4",
+        "title": "04.rész - A vitorláshajó",
+        "poster": "https://image.tmdb.org/t/p/original/4ipSH3IuHCgDarKRm2aTAxXAYkw.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E05.A%20kir%C3%A1ndul%C3%A1s.mp4",
+        "title": "05.rész - A kirándulás",
+        "poster": "https://image.tmdb.org/t/p/original/rvUYMD5Zxdi8qJ37rdSQtGESLoc.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E06.Pumukli%20%C3%A9s%20a%20dob-dobok.mp4",
+        "title": "06.rész - Pumukli és a dob-dobok",
+        "poster": "https://image.tmdb.org/t/p/original/9paI47zQ8O34jThD62b2Uc4Osx0.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E07.Pumukli%20%C3%A9s%20a%20kincskeres%C5%91k.mp4",
+        "title": "07.rész - Pumukli és a kincskeresők",
+        "poster": "https://image.tmdb.org/t/p/original/qTwaQOQ71EGMlquZmifAxBMp6ID.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E08.K%C3%ADs%C3%A9rtet%20a%20v%C3%ADkendh%C3%A1zban.mp4",
+        "title": "08.rész - Kísértet a víkendházban",
+        "poster": "https://image.tmdb.org/t/p/original/bN3k2uOX1hKkFJXL1snS2tGeLwK.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E09.hinta.mp4",
+        "title": "09.rész - A titokzatos hinta",
+        "poster": "https://image.tmdb.org/t/p/original/fGnh52BYnKvHpEMneCwpnKZx5j4.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E10.Pumukli%20%C3%A9s%20a%20macska.mp4",
+        "title": "10.rész - Pumukli és a macska",
+        "poster": "https://image.tmdb.org/t/p/original/hnNxrfzbF1IoPf3g8QUVWTPx7Lm.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E11.nathas.mp4",
+        "title": "11.rész - Pumukli náthás",
+        "poster": "https://image.tmdb.org/t/p/original/b3OtLdNhwRRQ5WWAzwbNlzg7d7U.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E12.%C3%89der%20kar%C3%A1csonyi%20aj%C3%A1nd%C3%A9ka.mp4",
+        "title": "12.rész - Éder karácsonyi ajándéka",
+        "poster": "https://image.tmdb.org/t/p/original/sUAwl8uy39eNC8OZZxc1QDV11b.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E13.barany.mp4",
+        "title": "13.rész - Pumukli az ártatlan bárány",
+        "poster": "https://image.tmdb.org/t/p/original/cgeFeqko7oxuwc879EPaxzFTFnl.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E14.A%20rigoly%C3%A1s%20vev%C5%91.mp4",
+        "title": "14.rész - A rigolyás vevő",
+        "poster": "https://image.tmdb.org/t/p/original/GWT9lZCM0FIoFVpPYqoURZ9rcg.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E15.felhasadt.mp4",
+        "title": "15.rész - A felhasadt hüvelykujj",
+        "poster": "https://image.tmdb.org/t/p/original/nsCL9DYDcO2M8FzS18rNs7AqOE5.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E16.Tabletta%20fejf%C3%A1j%C3%A1s%20ellen.mp4",
+        "title": "16.rész - Tabletta fejfájás ellen",
+        "poster": "https://image.tmdb.org/t/p/original/fbjW01eYeVCYVnPWqhe3c3wRvSw.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E17.Bombah%C3%ADr%20az%20%C3%BAjs%C3%A1gban.mp4",
+        "title": "17.rész - Bombahír az újságban",
+        "poster": "https://image.tmdb.org/t/p/original/lI9FHaJ2jzCAzN6OMOWpAYdGCXF.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E18.Pumukli%20telefon%C3%A1l.mp4",
+        "title": "18.rész - Pumukli telefonál",
+        "poster": "https://image.tmdb.org/t/p/original/dQBHmJyxpNEGyeJqDfvAHB6e2QN.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E19.Pumukli%20asztalos%20akar%20lenni.mp4",
+        "title": "19.rész - Pumukli asztalos akar lenni",
+        "poster": "https://image.tmdb.org/t/p/original/18welYv6oF7CAyvMUP5iUjT3nz0.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E20.Az%20ez%C3%BCst%20kuglib%C3%A1bu.mp4",
+        "title": "20.rész - Az ezüst kuglibábú",
+        "poster": "https://image.tmdb.org/t/p/original/c1udRMIutCTqBaxl95QInkLZnOr.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E21.tuz.mp4",
+        "title": "21.rész - Pumukli és a tűz",
+        "poster": "https://image.tmdb.org/t/p/original/vRrPS6O0YRl45cnfUcUClxKUDPt.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E22.Pumukli%20az%20%C3%B3r%C3%A1sboltban.mp4",
+        "title": "22.rész - Pumukli az órásboltban",
+        "poster": "https://image.tmdb.org/t/p/original/ccYBWbZ5eIh1ML9SDE0lYbDTmGX.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E23.gumikacsa.mp4",
+        "title": "23.rész - A gumikacsa",
+        "poster": "https://image.tmdb.org/t/p/original/jmZziTLl24Q0x0ljL1Yl0FgNfED.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E24.Pumukli%2C%20a%20boszork%C3%A1nyvad%C3%A1sz.mp4",
+        "title": "24.rész - Pumukli a boszorkányvadász",
+        "poster": "https://image.tmdb.org/t/p/original/cpSTMN49psxoYNouQBiWhM7YaNt.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E25.Seg%C3%ADts%C3%A9g%2C%20baj%20van%21.mp4",
+        "title": "25.rész - Segítség, baj van!",
+        "poster": "https://image.tmdb.org/t/p/original/fvpMoYiiMz2uIlqnE2fS8SrUui8.jpg"
+      },
+      {
+        "src": "https://archive.org/download/pumukli-sorozat-gyujtemeny/S02E26.Pumukli%20%C3%A9s%20a%20muzsika.mp4",
+        "title": "26.rész - Pumukli és a muzsika",
+        "poster": "https://image.tmdb.org/t/p/original/8i84j52CbxbIbmDCl8xpTJSvByU.jpg"
+      }
+    ]
+  }
+};
+    let aktualisEvad = "";
+    let aktualisVideoLanc = "";
+
+    const player = new Plyr('#player', {
+      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'fullscreen']
+    });
+
+    const menu = document.getElementById('playlistMenu');
+    const container = document.getElementById('itemsContainer');
+    const tabsContainer = document.getElementById('seasonTabsContainer');
+    const closeBtn = document.getElementById('menuCloseBtn');
+    const mainBox = document.getElementById('outputBox');
+
+    player.on('ready', () => {
+      if (mainBox) mainBox.style.opacity = "1";
+
+      const plyrContainer = document.querySelector('.plyr');
+      if (plyrContainer && menu) { plyrContainer.appendChild(menu); }
+
+      const volumeElement = document.querySelector('.plyr__volume');
+      if (volumeElement) {
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'plyr__control plyr__control--custom-btn';
+        menuBtn.id = 'customMenuBtn';
+        menuBtn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`;
+        
+        const intentBtn = document.createElement('button');
+        intentBtn.type = 'button';
+        intentBtn.className = 'plyr__control plyr__control--custom-btn';
+        intentBtn.id = 'customIntentBtn';
+        intentBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
+
+        volumeElement.parentNode.insertBefore(intentBtn, volumeElement.nextSibling);
+        volumeElement.parentNode.insertBefore(menuBtn, intentBtn);
+
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation(); menu.classList.add('open');
+        });
+
+        intentBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if(aktualisVideoLanc) {
+            const intentUrl = `intent:${aktualisVideoLanc}#Intent;type=video/*;S.title=Lejatszas;end`;
+            window.location.href = intentUrl;
+          }
+        });
+      }
+    });
+
+    closeBtn.onclick = (e) => { e.stopPropagation(); menu.classList.remove('open'); };
+
+    function buildMenu() {
+      tabsContainer.innerHTML = "";
+      Object.keys(sorozatAdatok).forEach(evadNev => {
+        const btn = document.createElement('button');
+        btn.className = `season-tab-btn ${evadNev === aktualisEvad ? 'active' : ''}`;
+        btn.innerText = evadNev;
+        btn.onclick = (e) => { e.stopPropagation(); aktualisEvad = evadNev; buildMenu(); };
+        tabsContainer.appendChild(btn);
+      });
+
+      container.innerHTML = "";
+      const evad = sorozatAdatok[aktualisEvad];
+      if(evad && evad.epizodok) {
+        evad.epizodok.forEach((ep) => {
+          const item = document.createElement('div');
+          item.className = 'playlist-item';
+          if (aktualisVideoLanc === ep.src) { item.classList.add('active'); }
+          item.innerHTML = `<img src="${ep.poster}" class="mini-poster" /><span class="episode-title">${ep.title}</span>`;
+          item.onclick = () => {
+            document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            betoltVideo(ep.src, evad.hatter);
+            menu.classList.remove('open');
+          };
+          container.appendChild(item);
+        });
+      }
+    }
+
+    function betoltVideo(src, hatterUrl) {
+      aktualisVideoLanc = src;
+      player.source = { 
+        type: 'video', 
+        poster: hatterUrl || '',
+        sources: [{ src: src, type: 'video/mp4' }] 
+      };
+    }
+
+    function initPlayer() {
+      const elsoEvad = Object.keys(sorozatAdatok)[0];
+      if(elsoEvad) {
+        aktualisEvad = elsoEvad;
+        const elsoEp = sorozatAdatok[aktualisEvad].epizodok[0];
+        if(elsoEp) { betoltVideo(elsoEp.src, sorozatAdatok[aktualisEvad].hatter); }
+      }
+      buildMenu();
+    }
+    setTimeout(initPlayer, 300);
+  </script>
+</body>
+</html>
