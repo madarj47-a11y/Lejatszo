@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lejátszó</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <style>
+    body { background: #111; margin: 0; padding: 0px; }
+    
+    .plyr-container { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #000; margin: 0px auto; opacity: 0; transition: opacity 0.5s ease; box-shadow: 0 10px 40px rgba(0,0,0,0.6); border: 0px solid rgba(255,255,255,0.1); max-width: 800px; position: relative; }
+    .plyr { height: 100% !important; }
+    .plyr video { object-fit: contain !important; }
+    .plyr__poster { background-size: cover !important; background-position: center !important; display: block !important; }
+    #player { display: none; width: 100%; }
+    :root { --plyr-color-main: #00bcd4; }
+    
+    /* IDŐK FIXÁLÁSA - EGY SORBAN TARTJA, KIS KÉPERNYŐN IS STABIL */
+    .plyr__time { display: inline-flex !important; align-items: center; font-size: 12px !important; padding: 0 2px !important; }
+    .plyr__time--duration { display: inline-block !important; }
+    .plyr__time--current + .plyr__time--duration::before { content: ' / ' !important; margin-right: 2px; }
+    
+    @media (max-width: 480px) {
+      .plyr__time { font-size: 11px !important; }
+      .plyr__controls { padding: 5px !important; }
+    }
+
+    .plyr__controls .plyr__control.plyr__control--custom-btn { display: inline-flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; color: #ffffff !important; opacity: 1 !important; padding: 0 !important; width: 32px !important; height: 32px !important; cursor: pointer !important; vertical-align: middle !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn:hover { background: #00b3ff !important; color: #ffffff !important; border-radius: 4px !important; }
+    .plyr__controls .plyr__control.plyr__control--custom-btn svg { width: 18px !important; height: 18px !important; display: block !important; fill: none !important; stroke: #ffffff !important; stroke-width: 2.5 !important; stroke-linecap: round !important; stroke-linejoin: round !important; }
+
+    .plyr-playlist-menu { position: absolute; top: 0; right: 0; bottom: 0; left: 0; height: 100% !important; max-height: 100% !important; background: rgba(15, 18, 24, 0.95); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 200; display: flex; flex-direction: column; padding: 0px; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .plyr-playlist-menu.open { opacity: 1; pointer-events: auto; }
+.plyr-playlist-menu.open {
+    border: none !important;
+    outline: none !important;
+}
+.plyr-playlist-menu { 
+    position: absolute; 
+    top: 0; 
+    right: 0; 
+    bottom: 0; 
+    left: 0; 
+    height: 100% !important; 
+    background: rgba(15, 18, 24, 0.95); 
+    backdrop-filter: blur(4px); 
+    -webkit-backdrop-filter: blur(4px); 
+    z-index: 200; 
+    display: flex; 
+    flex-direction: column; 
+    /* padding: 8px; <-- TÖRÖLD EZT */
+    margin: 0; /* Biztosítsd, hogy ne legyen margó */
+    opacity: 0; 
+    pointer-events: none; 
+    transition: opacity 0.3s ease; 
+    box-sizing: border-box; 
+    border-radius: 8px; /* Ha a konténer lekerekített, ez segít */
+}
+
+/* Helyette a belső konténereknek adj margót */
+.menu-header, .season-selector-wrapper, .playlist-scroll {
+    margin: 8px; /* Itt hozd vissza a 8px-es távolságot */
+}
+
+
+    .menu-header { display: flex; justify-content: space-between; align-items: center; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; flex-shrink: 0; }
+    .menu-header h3 { color: #fff; margin: 0; font-size: 15px; }
+    .season-selector-wrapper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+    .season-tab-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+    .season-tab-btn.active { background: #00b3ff; color: #fff; border-color: #00b3ff; }
+     .close-menu-btn {
+    position: absolute !important;
+    top: 15px !important;
+    right: 10px !important;
+    width: 30px !important;
+    height: 30px !important;
+    
+    /* Elegáns, félig áttetsző sötétszürke háttér */
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important; /* Vékony keret, ha szeretnéd */
+    
+    color: #fff !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 0 !important;
+    z-index: 9999 !important;
+}
+
+
+    .playlist-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; min-height: 0;  border-radius: 8px; }
+    .playlist-item { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); color: #ccc; padding: 5px; text-align: left; cursor: pointer; border-radius: 6px; transition: all 0.2s; flex-shrink: 0;  border-radius: 8px; }
+    .playlist-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .playlist-item.active { background: rgba(255, 255, 255, 0.05); color: #ffffff; border: 1px solid #ffffff; font-weight: bold; }
+    .mini-poster { width: 30px; height: 42px; object-fit: cover; border-radius: 4px; background: #222; }
+    .episode-title { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="plyr-container" id="outputBox">
+    <video id="player" playsinline controls></video>
+    <div id="playlistMenu" class="plyr-playlist-menu">
+
+      <div class="season-selector-wrapper" id="seasonTabsContainer"></div>
+      <div class="playlist-scroll" id="itemsContainer"></div>
+ <button class="close-menu-btn" id="menuCloseBtn">&times;</button>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+  <script>
+    const sorozatAdatok = {
+  "1-50": {
+    "hatter": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/01.mp4",
+        "title": "01",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/02.mp4",
+        "title": "02",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/03.mp4",
+        "title": "03",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/04.mp4",
+        "title": "04",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/05.mp4",
+        "title": "05",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/06.mp4",
+        "title": "06",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/07.mp4",
+        "title": "07",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/08.mp4",
+        "title": "08",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/09.mp4",
+        "title": "09",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/10.mp4",
+        "title": "10",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/11.mp4",
+        "title": "11",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/12.mp4",
+        "title": "12",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/13.mp4",
+        "title": "13",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/14.mp4",
+        "title": "14",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/15.mp4",
+        "title": "15",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/16.mp4",
+        "title": "16",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/17.mp4",
+        "title": "17",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/18.mp4",
+        "title": "18",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/19.mp4",
+        "title": "19",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/20.mp4",
+        "title": "20",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/21.mp4",
+        "title": "21",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/22.mp4",
+        "title": "22",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/23.mp4",
+        "title": "23",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/24.mp4",
+        "title": "24",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/25.mp4",
+        "title": "25",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/26.mp4",
+        "title": "26",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/27.mp4",
+        "title": "27",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/28.mp4",
+        "title": "28",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/29.mp4",
+        "title": "29",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/30.mp4",
+        "title": "30",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/31.mp4",
+        "title": "31",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/32.mp4",
+        "title": "32",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/33.mp4",
+        "title": "33",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/34.mp4",
+        "title": "34",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/35.mp4",
+        "title": "35",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/36.mp4",
+        "title": "36",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/37.mp4",
+        "title": "37",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/38.mp4",
+        "title": "38",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/39.mp4",
+        "title": "39",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/40.mp4",
+        "title": "40",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/41.mp4",
+        "title": "41",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/42.mp4",
+        "title": "42",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/43.mp4",
+        "title": "43",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/44.mp4",
+        "title": "44",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/45.mp4",
+        "title": "45",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/46.mp4",
+        "title": "46",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/47.mp4",
+        "title": "47",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/48.mp4",
+        "title": "48",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/49.mp4",
+        "title": "49",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/50.mp4",
+        "title": "50",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      }
+    ]
+  },
+  "51-100": {
+    "hatter": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/51.mp4",
+        "title": "51",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/52.mp4",
+        "title": "52",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/53.mp4",
+        "title": "53",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/54.mp4",
+        "title": "54",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/55.mp4",
+        "title": "55",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/56.mp4",
+        "title": "56",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/57.mp4",
+        "title": "57",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/58.mp4",
+        "title": "58",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/59.mp4",
+        "title": "59",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/60.mp4",
+        "title": "60",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/61.mp4",
+        "title": "61",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/62.mp4",
+        "title": "62",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/63.mp4",
+        "title": "63",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/64.mp4",
+        "title": "64",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/65.mp4",
+        "title": "65",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/66.mp4",
+        "title": "66",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/67.mp4",
+        "title": "67",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/68.mp4",
+        "title": "68",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/69.mp4",
+        "title": "69",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/70.mp4",
+        "title": "70",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/71.mp4",
+        "title": "71",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/72.mp4",
+        "title": "72",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/73.mp4",
+        "title": "73",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/74.mp4",
+        "title": "74",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/75.mp4",
+        "title": "75",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/76.mp4",
+        "title": "76",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/77.mp4",
+        "title": "77",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/78.mp4",
+        "title": "78",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/79.mp4",
+        "title": "79",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/80.mp4",
+        "title": "80",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/81.mp4",
+        "title": "81",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/82.mp4",
+        "title": "82",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/83.mp4",
+        "title": "83",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/84.mp4",
+        "title": "84",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/85.mp4",
+        "title": "85",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/86.mp4",
+        "title": "86",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/87.mp4",
+        "title": "87",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/88.mp4",
+        "title": "88",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/89.mp4",
+        "title": "89",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/90.mp4",
+        "title": "90",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/91.mp4",
+        "title": "91",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/92.mp4",
+        "title": "92",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/93.mp4",
+        "title": "93",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/94.mp4",
+        "title": "94",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/95.mp4",
+        "title": "95",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/96.mp4",
+        "title": "96",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/97.mp4",
+        "title": "97",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/98.mp4",
+        "title": "98",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/99.mp4",
+        "title": "99",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/100.mp4",
+        "title": "100",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      }
+    ]
+  },
+  "101-150": {
+    "hatter": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-titkok-1/101.mp4",
+        "title": "101",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/102.mp4",
+        "title": "102",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/103.mp4",
+        "title": "103",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/104.mp4",
+        "title": "104",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/105.mp4",
+        "title": "105",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/106.mp4",
+        "title": "106",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/107.mp4",
+        "title": "107",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/108.mp4",
+        "title": "108",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/109.mp4",
+        "title": "109",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/110.mp4",
+        "title": "110",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/111.mp4",
+        "title": "111",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/112.mp4",
+        "title": "112",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/113.mp4",
+        "title": "113",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/114.mp4",
+        "title": "114",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/115.mp4",
+        "title": "115",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/116.mp4",
+        "title": "116",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/117.mp4",
+        "title": "117",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/118.mp4",
+        "title": "118",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/119.mp4",
+        "title": "119",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/120.mp4",
+        "title": "120",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/121.mp4",
+        "title": "121",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/122.mp4",
+        "title": "122",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/123.mp4",
+        "title": "123",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/124.mp4",
+        "title": "124",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/125.mp4",
+        "title": "125",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/126.mp4",
+        "title": "126",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/127.mp4",
+        "title": "127",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/128.mp4",
+        "title": "128",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/129.mp4",
+        "title": "129",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/130.mp4",
+        "title": "130",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/131.mp4",
+        "title": "131",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/132.mp4",
+        "title": "132",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/133.mp4",
+        "title": "133",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/134.mp4",
+        "title": "134",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/135.mp4",
+        "title": "135",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/136.mp4",
+        "title": "136",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/137.mp4",
+        "title": "137",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/138.mp4",
+        "title": "138",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/139.mp4",
+        "title": "139",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/140.mp4",
+        "title": "140",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/141.mp4",
+        "title": "141",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/142.mp4",
+        "title": "142",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/143.mp4",
+        "title": "143",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/144.mp4",
+        "title": "144",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/145.mp4",
+        "title": "145",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/146.mp4",
+        "title": "146",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/147.mp4",
+        "title": "147",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/148.mp4",
+        "title": "148",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/149.mp4",
+        "title": "149",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/150.mp4",
+        "title": "150",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      }
+    ]
+  },
+  "151-200": {
+    "hatter": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/151.mp4",
+        "title": "151",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/152.mp4",
+        "title": "152",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/153.mp4",
+        "title": "153",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/154.mp4",
+        "title": "154",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/155.mp4",
+        "title": "155",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/156.mp4",
+        "title": "156",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/157.mp4",
+        "title": "157",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/158.mp4",
+        "title": "158",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/159.mp4",
+        "title": "159",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/160.mp4",
+        "title": "160",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/161.mp4",
+        "title": "161",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/162.mp4",
+        "title": "162",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/163.mp4",
+        "title": "163",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/164.mp4",
+        "title": "164",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-2/165.mp4",
+        "title": "165",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/166.mp4",
+        "title": "166",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/167.mp4",
+        "title": "167",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/168.mp4",
+        "title": "168",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/169.mp4",
+        "title": "169",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/170.mp4",
+        "title": "170",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/171.mp4",
+        "title": "171",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/172.mp4",
+        "title": "172",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/173.mp4",
+        "title": "173",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/174.mp4",
+        "title": "174",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/175.mp4",
+        "title": "175",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/176.mp4",
+        "title": "176",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/177.mp4",
+        "title": "177",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/178.mp4",
+        "title": "178",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/179.mp4",
+        "title": "179",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/180.mp4",
+        "title": "180",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/181.mp4",
+        "title": "181",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/182.mp4",
+        "title": "182",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/183.mp4",
+        "title": "183",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/184.mp4",
+        "title": "184",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/185.mp4",
+        "title": "185",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/186.mp4",
+        "title": "186",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/187.mp4",
+        "title": "187",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/188.mp4",
+        "title": "188",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/189.mp4",
+        "title": "189",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/190.mp4",
+        "title": "190",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/191.mp4",
+        "title": "191",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/192.mp4",
+        "title": "192",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://ia600607.us.archive.org/7/items/csaladi-titkok-3/193.mp4",
+        "title": "193",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/194.mp4",
+        "title": "194",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/195.mp4",
+        "title": "195",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/196.mp4",
+        "title": "196",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/197.mp4",
+        "title": "197",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/198.mp4",
+        "title": "198",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/199.mp4",
+        "title": "199",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/200.mp4",
+        "title": "200",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      }
+    ]
+  },
+  "201-226": {
+    "hatter": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg",
+    "epizodok": [
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/201.mp4",
+        "title": "201",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/202.mp4",
+        "title": "202",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/203.mp4",
+        "title": "203",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/204.mp4",
+        "title": "204",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/205.mp4",
+        "title": "205",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/206.mp4",
+        "title": "206",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/207.mp4",
+        "title": "207",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/208.mp4",
+        "title": "208",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/209.mp4",
+        "title": "209",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/210.mp4",
+        "title": "210",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/211.mp4",
+        "title": "211",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/212.mp4",
+        "title": "212",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/213.mp4",
+        "title": "213",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/214.mp4",
+        "title": "214",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/215.mp4",
+        "title": "215",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/216.mp4",
+        "title": "216",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/217.mp4",
+        "title": "217",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/218.mp4",
+        "title": "218",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/219.mp4",
+        "title": "219",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/220.mp4",
+        "title": "220",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/221.mp4",
+        "title": "221",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/222.mp4",
+        "title": "222",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/223.mp4",
+        "title": "223",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/224.mp4",
+        "title": "224",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/225.mp4",
+        "title": "225",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      },
+      {
+        "src": "https://archive.org/download/csaladi-titkok-3/226.mp4",
+        "title": "226",
+        "poster": "https://image.tmdb.org/t/p/original/cazdTxqf32wRdW3C0H9wrZK9BSi.jpg"
+      }
+    ]
+  }
+};
+    let aktualisEvad = "";
+    let aktualisVideoLanc = "";
+
+    const player = new Plyr('#player', {
+      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'fullscreen']
+    });
+
+    const menu = document.getElementById('playlistMenu');
+    const container = document.getElementById('itemsContainer');
+    const tabsContainer = document.getElementById('seasonTabsContainer');
+    const closeBtn = document.getElementById('menuCloseBtn');
+    const mainBox = document.getElementById('outputBox');
+
+    player.on('ready', () => {
+      if (mainBox) mainBox.style.opacity = "1";
+
+      const plyrContainer = document.querySelector('.plyr');
+      if (plyrContainer && menu) { plyrContainer.appendChild(menu); }
+
+      const volumeElement = document.querySelector('.plyr__volume');
+      if (volumeElement) {
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'plyr__control plyr__control--custom-btn';
+        menuBtn.id = 'customMenuBtn';
+        menuBtn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`;
+        
+        const intentBtn = document.createElement('button');
+        intentBtn.type = 'button';
+        intentBtn.className = 'plyr__control plyr__control--custom-btn';
+        intentBtn.id = 'customIntentBtn';
+        intentBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
+
+        volumeElement.parentNode.insertBefore(intentBtn, volumeElement.nextSibling);
+        volumeElement.parentNode.insertBefore(menuBtn, intentBtn);
+
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation(); menu.classList.add('open');
+        });
+
+        intentBtn.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if(aktualisVideoLanc) {
+            const intentUrl = `intent:${aktualisVideoLanc}#Intent;type=video/*;S.title=Lejatszas;end`;
+            window.location.href = intentUrl;
+          }
+        });
+      }
+    });
+
+    closeBtn.onclick = (e) => { e.stopPropagation(); menu.classList.remove('open'); };
+
+    function buildMenu() {
+      tabsContainer.innerHTML = "";
+      Object.keys(sorozatAdatok).forEach(evadNev => {
+        const btn = document.createElement('button');
+        btn.className = `season-tab-btn ${evadNev === aktualisEvad ? 'active' : ''}`;
+        btn.innerText = evadNev;
+        btn.onclick = (e) => { e.stopPropagation(); aktualisEvad = evadNev; buildMenu(); };
+        tabsContainer.appendChild(btn);
+      });
+
+      container.innerHTML = "";
+      const evad = sorozatAdatok[aktualisEvad];
+      if(evad && evad.epizodok) {
+        evad.epizodok.forEach((ep) => {
+          const item = document.createElement('div');
+          item.className = 'playlist-item';
+          if (aktualisVideoLanc === ep.src) { item.classList.add('active'); }
+          item.innerHTML = `<img src="${ep.poster}" class="mini-poster" /><span class="episode-title">${ep.title}</span>`;
+          item.onclick = () => {
+            document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            betoltVideo(ep.src, evad.hatter);
+            menu.classList.remove('open');
+          };
+          container.appendChild(item);
+        });
+      }
+    }
+
+    function betoltVideo(src, hatterUrl) {
+      aktualisVideoLanc = src;
+      player.source = { 
+        type: 'video', 
+        poster: hatterUrl || '',
+        sources: [{ src: src, type: 'video/mp4' }] 
+      };
+    }
+
+    function initPlayer() {
+      const elsoEvad = Object.keys(sorozatAdatok)[0];
+      if(elsoEvad) {
+        aktualisEvad = elsoEvad;
+        const elsoEp = sorozatAdatok[aktualisEvad].epizodok[0];
+        if(elsoEp) { betoltVideo(elsoEp.src, sorozatAdatok[aktualisEvad].hatter); }
+      }
+      buildMenu();
+    }
+    setTimeout(initPlayer, 300);
+  </script>
+</body>
+</html>
